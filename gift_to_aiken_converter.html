@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIFT to AIKEN Converter</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #eef2f7;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #004085;
+            margin-bottom: 20px;
+        }
+        h2 {
+            font-size: 1.2em;
+            color: #555;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 5px;
+            margin-top: 25px;
+        }
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            margin-top: 8px;
+            border: 1px solid #cce5ff;
+            border-radius: 6px;
+            resize: vertical;
+            background-color: #f8f9fa;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .button {
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            flex: 1;
+        }
+        #previewButton {
+            background-color: #007bff;
+            color: white;
+        }
+        #previewButton:hover {
+            background-color: #0056b3;
+            transform: translateY(-2px);
+        }
+        #convertButton {
+            background-color: #28a745;
+            color: white;
+            display: none;
+        }
+        #convertButton:hover {
+            background-color: #218838;
+            transform: translateY(-2px);
+        }
+        #exportButton {
+            background-color: #6c757d;
+            color: white;
+            display: none;
+        }
+        #exportButton:hover {
+            background-color: #5a6268;
+            transform: translateY(-2px);
+        }
+        .output-container {
+            margin-top: 20px;
+        }
+        #errorLog {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+        }
+        .counter {
+            text-align: right;
+            font-size: 0.9em;
+            color: #777;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>GIFT to AIKEN Converter</h1>
+
+        <h2>1. Paste GIFT Questions</h2>
+        <textarea id="giftInput" placeholder="Paste your GIFT format questions here..."></textarea>
+        <button id="previewButton" class="button" onclick="previewQuestions()">Preview & Edit</button>
+
+        <div class="output-container" id="previewContainer" style="display: none;">
+            <h2>2. Preview & Edit Questions</h2>
+            <textarea id="previewArea" placeholder="Review and edit the questions before converting."></textarea>
+            <div id="previewCounter" class="counter"></div>
+            <div class="button-group">
+                <button id="convertButton" class="button" onclick="convertAndShowOutput()">Convert to AIKEN</button>
+            </div>
+        </div>
+
+        <div class="output-container" id="outputContainer" style="display: none;">
+            <h2>3. AIKEN Format Output</h2>
+            <textarea id="aikenOutput" readonly></textarea>
+            <div id="aikenCounter" class="counter"></div>
+            <div class="button-group">
+                <button id="exportButton" class="button" onclick="exportFile()">Export to .txt</button>
+            </div>
+        </div>
+
+        <div id="errorLog"></div>
+    </div>
+
+    <script>
+        // Global variable to store parsed questions
+        let parsedQuestions = [];
+    
+        function previewQuestions() {
+            const giftText = document.getElementById('giftInput').value;
+            const errorLog = document.getElementById('errorLog');
+            const previewArea = document.getElementById('previewArea');
+            const previewContainer = document.getElementById('previewContainer');
+            const convertButton = document.getElementById('convertButton');
+            const previewCounter = document.getElementById('previewCounter');
+            
+            errorLog.style.display = 'none';
+            errorLog.innerHTML = '';
+            previewArea.value = '';
+            parsedQuestions = [];
+
+            // Split the input into questions based on blank lines
+            const lines = giftText.split('\n');
+            const questionBlocks = [];
+            let currentBlock = [];
+
+            for (const line of lines) {
+                if (line.trim() === '') {
+                    if (currentBlock.length > 0) {
+                        questionBlocks.push(currentBlock.join('\n'));
+                        currentBlock = [];
+                    }
+                } else if (!line.startsWith('//') && !line.startsWith('$CATEGORY')) {
+                    currentBlock.push(line);
+                }
+            }
+            if (currentBlock.length > 0) {
+                questionBlocks.push(currentBlock.join('\n'));
+            }
+
+            let errors = [];
+
+            questionBlocks.forEach((q, index) => {
+                const questionNumber = index + 1;
+                // Regex to handle the format ::Title::Question Text:{...}
+                const match = q.match(/::.*?::(.*?){(.*)}/s);
+                if (match) {
+                    const fullQuestionText = match[1].trim();
+                    const answersText = match[2].trim();
+                    
+                    const correctAnswers = answersText.split('=').length - 1;
+                    const totalAnswers = answersText.split(/(?=\=)|(?=~)/).map(a => a.trim()).filter(a => a).length;
+                    
+                    if (correctAnswers !== 1) {
+                        errors.push(`Error in Question ${questionNumber}: This question has ${correctAnswers} correct answers. It must have exactly one.`);
+                    } else if (totalAnswers < 2) {
+                        errors.push(`Error in Question ${questionNumber}: Not enough answer options.`);
+                    } else {
+                        const tempAnswers = answersText.split(/(?=\=)|(?=~)/).map(a => a.trim()).filter(a => a);
+                        const options = [];
+                        const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+                        
+                        tempAnswers.forEach((ans, ansIndex) => {
+                            const optionText = ans.startsWith('=') ? ans.substring(1).trim() : ans.substring(1).trim();
+                            options.push(`${letters[ansIndex]}. ${optionText}`);
+                        });
+                        
+                        parsedQuestions.push({
+                            questionText: fullQuestionText,
+                            answers: tempAnswers,
+                            preview: `${fullQuestionText}\n${options.join('\n')}\n\n`
+                        });
+                    }
+
+                } else {
+                    errors.push(`Error in Question ${questionNumber}: Invalid GIFT format. Ensure it has '::...::...{...}' structure.`);
+                }
+            });
+
+            if (errors.length > 0) {
+                errorLog.innerHTML = '<h2>Conversion Errors</h2>' + errors.join('<br>');
+                errorLog.style.display = 'block';
+                previewContainer.style.display = 'none';
+                document.getElementById('outputContainer').style.display = 'none';
+            } else {
+                previewArea.value = parsedQuestions.map(q => q.preview).join('');
+                previewCounter.textContent = `${parsedQuestions.length} questions processed`;
+                previewContainer.style.display = 'block';
+                convertButton.style.display = 'block';
+            }
+        }
+    
+        function convertAndShowOutput() {
+            const aikenOutput = document.getElementById('aikenOutput');
+            const outputContainer = document.getElementById('outputContainer');
+            const exportButton = document.getElementById('exportButton');
+            const aikenCounter = document.getElementById('aikenCounter');
+
+            let output = '';
+            
+            parsedQuestions.forEach(q => {
+                let questionOutput = q.questionText.trim() + '\n';
+                let correctAnswer = '';
+                const letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+                q.answers.forEach((ans, index) => {
+                    const optionText = ans.startsWith('=') ? ans.substring(1).trim() : ans.substring(1).trim();
+                    questionOutput += `${letters[index]}. ${optionText}\n`;
+                    if (ans.startsWith('=')) {
+                        correctAnswer = letters[index];
+                    }
+                });
+
+                if (correctAnswer) {
+                    questionOutput += `ANSWER: ${correctAnswer}\n\n`;
+                    output += questionOutput;
+                }
+            });
+
+            aikenOutput.value = output.trim();
+            aikenCounter.textContent = `${parsedQuestions.length} questions processed`;
+            outputContainer.style.display = 'block';
+            exportButton.style.display = 'block';
+        }
+        
+        function exportFile() {
+            const aikenText = document.getElementById('aikenOutput').value;
+            const blob = new Blob([aikenText], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'questions.txt';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
